@@ -10,8 +10,12 @@ custom_components/tauron_g13/
   sensor.py         # sensor.tauron_g13_zone
   binary_sensor.py  # is_cheap / is_peak
   calendar.py       # calendar.tauron_g13_zones (timeline source)
-  config_flow.py    # field-less single-instance setup
+  config_flow.py    # field-less single-instance setup + timeline-range options
+  frontend_registration.py  # serves + auto-registers the bundled Lovelace card
+  frontend/tauron-g13-timeline.js  # BUILT card bundle (committed; do not hand-edit)
   tests/            # tests for the pure engine
+card-src/           # source + build for the card (NOT shipped to HA)
+  src/tauron-g13-timeline.ts
 examples/dashboard.yaml
 ```
 
@@ -49,6 +53,25 @@ When changing a `from homeassistant...` import, verify the path against the
 installed HA version — module locations move between releases. (Example: in
 HA 2026.x, `DeviceInfo` is in `homeassistant.helpers.device_registry`, **not**
 `homeassistant.helpers.device_info`.)
+
+## Building the frontend card
+
+The `tauron-g13-timeline` Lovelace card is a Lit + TypeScript source under
+`card-src/`, bundled to a single committed ES module that the integration serves
+and auto-registers (`frontend_registration.py`). HACS does **not** run a build on
+install, so the built file is committed — **rebuild and commit it whenever you
+change the card source.**
+
+```bash
+# Uses Node via nix (no global install needed):
+cd card-src
+nix shell nixpkgs#nodejs_22 --command npm install   # first time only
+nix shell nixpkgs#nodejs_22 --command npm run build  # -> ../custom_components/tauron_g13/frontend/tauron-g13-timeline.js
+```
+
+The card reads `hass.states['sensor.tauron_g13_zone'].attributes.timeline`; it
+needs no network access. The resource URL carries a `?v=<manifest version>`
+cache-buster, so bumping the integration version forces browsers to reload it.
 
 ## Releasing
 

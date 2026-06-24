@@ -1,0 +1,21 @@
+{
+  "name": "tauron-g13-timeline-card",
+  "version": "0.3.0",
+  "description": "Lovelace card rendering the Tauron G13 zone timeline (past + future) as a merged-segment SVG bar.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "rollup -c",
+    "watch": "rollup -c --watch"
+  },
+  "dependencies": {
+    "lit": "^3.2.1"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^15.3.0",
+    "@rollup/plugin-typescript": "^12.1.1",
+    "rollup": "^4.28.0",
+    "tslib": "^2.8.1",
+    "typescript": "^5.7.2"
+  }
+}

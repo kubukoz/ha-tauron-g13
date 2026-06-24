@@ -3,3 +3,9 @@ __pycache__/
 .pytest_cache/
 .venv/
 .DS_Store
+
+# Card build tooling (card-src/). The BUILT bundle is committed at
+# custom_components/tauron_g13/frontend/tauron-g13-timeline.js — only the
+# toolchain's local state is ignored.
+card-src/node_modules/
+card-src/package-lock.json

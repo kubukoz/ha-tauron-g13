@@ -4,6 +4,11 @@ from __future__ import annotations
 
 DOMAIN = "tauron_g13"
 
+# Bundled Lovelace card (see frontend_registration.py). The resource URL gets a
+# ?v=<manifest version> cache-buster so browsers reload it on integration bumps.
+CARD_FILENAME = "tauron-g13-timeline.js"
+CARD_URL_BASE = "/tauron_g13"
+
 # IANA timezone the G13 schedule is defined in. Zones flip on Polish wall-clock
 # time regardless of the Home Assistant instance's configured timezone.
 TIMEZONE = "Europe/Warsaw"

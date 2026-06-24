@@ -58,40 +58,49 @@ timeline strip, and a color-coded upcoming-zones agenda) is in
 **[`examples/dashboard.yaml`](examples/dashboard.yaml)**. Paste it under `views:`
 via *Dashboard → Edit → Raw configuration editor*.
 
-Two of the cards are HACS frontend resources (the rest is built in):
+The timeline strip is a **custom card bundled with this integration** — no
+separate install. The only extra HACS resource is the calendar agenda:
 
-| Card | Used for | HACS |
-|------|----------|------|
-| [HTML+Jinja2 Template card](https://github.com/PiotrMachowski/Home-Assistant-Lovelace-HTML-Jinja2-Template-card) (`html-template-card`) | the per-hour SVG strip | required |
-| [`atomic-calendar-revive`](https://github.com/totaldebug/atomic-calendar-revive) | the color-coded agenda | required |
+| Card | Used for | Install |
+|------|----------|---------|
+| `tauron-g13-timeline` | the timeline strip | **ships with this integration** |
+| [`atomic-calendar-revive`](https://github.com/totaldebug/atomic-calendar-revive) | the color-coded agenda | HACS (default store) |
 
-Both are in the **default HACS store** — install via *HACS → search by name →
-Download* (no custom repository needed), then restart / hard-refresh.
+### Timeline strip (bundled `tauron-g13-timeline` card)
 
-### Timeline strip (HA-style merged-segment bar)
+The integration ships a Lovelace card, `tauron-g13-timeline`, and registers it
+as a dashboard resource automatically (in Lovelace **storage** mode — the
+default). Drop it on any dashboard:
 
-The strip renders directly from the sensor's `timeline` attribute — a
-precomputed list of `{start, zone}` per hour — so there's no charting library
-and no REST call. It's styled like Home Assistant's own history *timeline* row,
-but extends into the future: consecutive same-zone hours are **merged** into one
-continuous segment, the exact start time is labelled at every zone change, "now"
-is marked, and each segment has a hover tooltip. The window is whatever you set
-in the integration's **Options** (default −4h … +24h).
+```yaml
+type: custom:tauron-g13-timeline
+title: G13 zones (−4h … +24h)   # optional
+entity: sensor.tauron_g13_zone  # optional; this is the default
+```
+
+It reads the sensor's `timeline` attribute (a precomputed list of
+`{start, zone}` per hour) and draws past + future zones like Home Assistant's
+own history *timeline* row: consecutive same-zone hours are **merged** into one
+continuous segment, the start time is labelled at every zone change, "now" is
+marked, and each segment has a hover tooltip. The window is whatever you set in
+the integration's **Options** (default −4h … +24h).
+
+> **YAML-mode Lovelace?** Auto-registration only works in storage mode. If your
+> dashboards are in YAML mode, add the resource yourself once:
+> ```yaml
+> lovelace:
+>   resources:
+>     - url: /tauron_g13/tauron-g13-timeline.js
+>       type: module
+> ```
 
 > **Why not the built-in history-graph for the past?** HA excludes the `sensor`
 > domain from state colouring (it isn't in `STATE_COLORED_DOMAIN`), so a
 > `history-graph` of the zone sensor paints the enum states with an arbitrary
-> cycling palette — e.g. off-peak comes out **red**, exactly backwards. This SVG
-> strip colours zones semantically (green = cheap, amber = mid, red = peak) for
+> cycling palette — e.g. off-peak comes out **red**, exactly backwards. This
+> card colours zones semantically (green = cheap, amber = mid, red = peak) for
 > both past and future, so it replaces the history card entirely. Increase
 > *hours behind* in Options for a longer history tail.
-
-> The card's `content` is a **Jinja2** template (PiotrMachowski's card), not
-> JavaScript. **`ignore_line_breaks: true` is required** — otherwise the card
-> turns every template newline into a `<br>` and the SVG breaks, so the markup
-> is emitted on as few lines as possible with Jinja whitespace control
-> (`{%- -%}`). See [`examples/dashboard.yaml`](examples/dashboard.yaml) for the
-> full card (segment merging, boundary labels, now-marker, tooltips).
 
 > The "now" marker and boundary labels assume Home Assistant's timezone matches
 > the schedule's (Europe/Warsaw). If yours differs, the bars are still correct —
