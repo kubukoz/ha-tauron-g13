@@ -46,56 +46,69 @@ views:
           - entity: binary_sensor.tauron_g13_is_peak
             name: Peak
 
-      # ---- Timeline strip: one colored bar per hour (inline SVG) ---------- #
+      # ---- Timeline strip: HA-style merged-segment bar (inline SVG) ------- #
       #
-      # Rendered with html-template-card (HACS) straight from the zone sensor's
-      # `timeline` attribute — a precomputed list of {start, zone} per hour. No
-      # charting library, no REST call: just one <rect> per hour, colored by
-      # zone, with the current hour outlined. The window (−4h…+24h by default)
+      # Built from the zone sensor's `timeline` attribute (a per-hour list of
+      # {start, zone}) but rendered like Home Assistant's own history "timeline"
+      # row: consecutive same-zone hours are MERGED into one continuous segment,
+      # the exact start time is labelled at every zone change, "now" is marked,
+      # and each segment has a hover tooltip. The window (−4h…+24h by default)
       # is set in the integration's options, so this card needs no tuning.
       #
-      # html-template-card evaluates the ${...} block as JS with `hass`/`states`
-      # in scope and injects the returned string as raw HTML (no sanitizing), so
-      # inline SVG renders as-is.
+      # HA doesn't colour enum *sensor* states (sensor isn't in its
+      # STATE_COLORED_DOMAIN set), so we keep a semantic palette — green/amber/
+      # red actually means cheap/medium/peak here — and borrow HA's theme CSS
+      # variables only for the chrome (labels, divider, now-line).
+      #
+      # PiotrMachowski's HTML+Jinja2 Template card (HACS, default store): the
+      # `content` is a Jinja2 template rendered as raw HTML, so inline <svg>
+      # shows as-is. ignore_line_breaks: true is REQUIRED — otherwise the card
+      # turns every template newline into a <br> and the SVG breaks; the markup
+      # is emitted on as few lines as possible (with {%- -%}) for that reason.
       - type: custom:html-template-card
         title: G13 zones (−4h … +24h)
-        ignore_line_errors: true
+        ignore_line_breaks: true
         content: |
-          ${(() => {
-            const tl = hass.states['sensor.tauron_g13_zone']
-              ?.attributes?.timeline || [];
-            if (!tl.length) return 'No timeline data yet.';
-
-            const palette = {
-              offpeak: '#2e7d32',  // green
-              mid:     '#f9a825',  // amber
-              peak:    '#c62828',  // red
-            };
-            const W = 100 / tl.length;          // bar width in % of viewBox
-            const now = new Date();
-
-            const bars = tl.map((c, i) => {
-              const d = new Date(c.start);
-              const fill = palette[c.zone] || palette.offpeak;
-              // Outline the cell that contains the current hour.
-              const isNow = Math.abs(d - now) < 3600000 &&
-                d.getHours() === now.getHours();
-              const stroke = isNow
-                ? ' stroke="#ffffff" stroke-width="0.6"' : '';
-              // Hour label every 3 hours to avoid clutter.
-              const label = d.getHours() % 3 === 0
-                ? `<text x="${i * W + W / 2}" y="19" font-size="3"
-                     text-anchor="middle" fill="var(--secondary-text-color)"
-                     >${String(d.getHours()).padStart(2, '0')}</text>`
-                : '';
-              return `<rect x="${i * W}" y="0" width="${W}" height="12"
-                        fill="${fill}"${stroke} />${label}`;
-            }).join('');
-
-            return `<svg viewBox="0 0 100 22" width="100%"
-                      preserveAspectRatio="none"
-                      style="display:block">${bars}</svg>`;
-          })()}
+          {% set tl = state_attr('sensor.tauron_g13_zone', 'timeline') %}
+          {%- if not tl -%}
+            No timeline data yet.
+          {%- else -%}
+          {%- set palette = {'offpeak': '#2e7d32', 'mid': '#f9a825', 'peak': '#c62828'} -%}
+          {%- set labels = {'offpeak': 'off-peak', 'mid': 'mid', 'peak': 'PEAK'} -%}
+          {%- set n = tl | length -%}
+          {%- set w = 100 / n -%}
+          {%- set now_iso = now().strftime('%Y-%m-%dT%H') -%}
+          {#- index of the hour containing "now", for the marker line -#}
+          {%- set ns = namespace(now_i = -1) -%}
+          {%- for c in tl -%}{%- if c.start[:13] == now_iso -%}{%- set ns.now_i = loop.index0 -%}{%- endif -%}{%- endfor -%}
+          <svg viewBox="0 0 100 20" width="100%" preserveAspectRatio="none" style="display:block;overflow:visible">
+          {#- one rect per merged segment: emit a block whenever the zone changes or at the end -#}
+          {%- set seg = namespace(start_i = 0, last_label_x = -99) -%}
+          {%- for c in tl -%}
+          {%- set is_last = loop.last -%}
+          {%- set changed = (not loop.last) and (tl[loop.index].zone != c.zone) -%}
+          {%- if changed or is_last -%}
+          {%- set x = seg.start_i * w -%}
+          {%- set seg_w = (loop.index0 - seg.start_i + 1) * w -%}
+          {%- set z = c.zone -%}
+          <rect x="{{ x }}" y="0" width="{{ seg_w }}" height="11" fill="{{ palette.get(z, palette['offpeak']) }}"><title>{{ labels.get(z, z) }} — from {{ tl[seg.start_i].start[11:16] }}</title></rect>
+          {#- zone label centred in the segment when it's wide enough -#}
+          {%- if seg_w > 8 -%}<text x="{{ x + seg_w / 2 }}" y="7.5" font-size="3.2" text-anchor="middle" fill="#ffffff" style="font-weight:600">{{ labels.get(z, z) }}</text>{%- endif -%}
+          {#- boundary tick always; start-time label only if it won't collide with the previous one (~9 units wide) -#}
+          <line x1="{{ x }}" y1="11" x2="{{ x }}" y2="13" stroke="var(--divider-color, #888)" stroke-width="0.3" />
+          {%- if x - seg.last_label_x >= 9 -%}<text x="{{ x }}" y="17" font-size="3" text-anchor="middle" fill="var(--secondary-text-color, #888)">{{ tl[seg.start_i].start[11:16] }}</text>{%- set seg.last_label_x = x -%}{%- endif -%}
+          {%- set seg.start_i = loop.index0 + 1 -%}
+          {%- endif -%}
+          {%- endfor -%}
+          {#- final right-edge time label -#}
+          <text x="100" y="17" font-size="3" text-anchor="end" fill="var(--secondary-text-color, #888)">{{ tl[n-1].start[11:16] }}</text>
+          {#- now marker -#}
+          {%- if ns.now_i >= 0 -%}
+          {%- set nx = (ns.now_i + 0.5) * w -%}
+          <line x1="{{ nx }}" y1="-1" x2="{{ nx }}" y2="12" stroke="var(--primary-text-color, #fff)" stroke-width="0.5" /><text x="{{ nx }}" y="-1.5" font-size="3" text-anchor="middle" fill="var(--primary-text-color, #fff)">now</text>
+          {%- endif -%}
+          </svg>
+          {%- endif -%}
 
       # ---- Future blocks as a color-coded agenda ------------------------- #
       #
@@ -123,10 +136,12 @@ views:
             allowlist: '\(off-peak\)'
             color: '#2e7d32'   # offpeak — green
 
-      # ---- History: how the zone moved over the last day ----------------- #
-      - type: history-graph
-        title: Zone history (24h)
-        hours_to_show: 24
-        entities:
-          - entity: sensor.tauron_g13_zone
-            name: Zone
+      # NOTE: there is deliberately no built-in `history-graph` card for the
+      # zone here. Home Assistant excludes the `sensor` domain from state
+      # colouring (it isn't in STATE_COLORED_DOMAIN), so history-graph paints
+      # the enum states with an arbitrary cycling palette — e.g. off-peak comes
+      # out red, which is exactly backwards. The SVG strip above already shows
+      # the recent past (its −Nh window) with correct green/amber/red, so it is
+      # the single, consistently-coloured timeline for both past and future.
+      # Widen the past via the integration's Options (hours behind) if you want
+      # more history in the strip.

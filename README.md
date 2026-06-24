@@ -62,40 +62,40 @@ Two of the cards are HACS frontend resources (the rest is built in):
 
 | Card | Used for | HACS |
 |------|----------|------|
-| [`html-template-card`](https://github.com/PiotrMachowski/Home-Assistant-Lovelace-HTML-Jinja2-Template-card) | the per-hour SVG strip | required |
+| [HTML+Jinja2 Template card](https://github.com/PiotrMachowski/Home-Assistant-Lovelace-HTML-Jinja2-Template-card) (`html-template-card`) | the per-hour SVG strip | required |
 | [`atomic-calendar-revive`](https://github.com/totaldebug/atomic-calendar-revive) | the color-coded agenda | required |
 
-### Timeline strip (one colored bar per hour)
+Both are in the **default HACS store** — install via *HACS → search by name →
+Download* (no custom repository needed), then restart / hard-refresh.
+
+### Timeline strip (HA-style merged-segment bar)
 
 The strip renders directly from the sensor's `timeline` attribute — a
 precomputed list of `{start, zone}` per hour — so there's no charting library
-and no REST call: just one `<rect>` per hour, colored by zone, current hour
-outlined. The window is whatever you set in the integration's **Options**
-(default −4h … +24h).
+and no REST call. It's styled like Home Assistant's own history *timeline* row,
+but extends into the future: consecutive same-zone hours are **merged** into one
+continuous segment, the exact start time is labelled at every zone change, "now"
+is marked, and each segment has a hover tooltip. The window is whatever you set
+in the integration's **Options** (default −4h … +24h).
 
-```yaml
-type: custom:html-template-card
-title: G13 zones (−4h … +24h)
-ignore_line_errors: true
-content: |
-  ${(() => {
-    const tl = hass.states['sensor.tauron_g13_zone']
-      ?.attributes?.timeline || [];
-    if (!tl.length) return 'No timeline data yet.';
-    const palette = { offpeak: '#2e7d32', mid: '#f9a825', peak: '#c62828' };
-    const W = 100 / tl.length;
-    const now = new Date();
-    const bars = tl.map((c, i) => {
-      const d = new Date(c.start);
-      const fill = palette[c.zone] || palette.offpeak;
-      const isNow = Math.abs(d - now) < 3600000 && d.getHours() === now.getHours();
-      const stroke = isNow ? ' stroke="#ffffff" stroke-width="0.6"' : '';
-      return `<rect x="${i * W}" y="0" width="${W}" height="12" fill="${fill}"${stroke} />`;
-    }).join('');
-    return `<svg viewBox="0 0 100 14" width="100%" preserveAspectRatio="none"
-              style="display:block">${bars}</svg>`;
-  })()}
-```
+> **Why not the built-in history-graph for the past?** HA excludes the `sensor`
+> domain from state colouring (it isn't in `STATE_COLORED_DOMAIN`), so a
+> `history-graph` of the zone sensor paints the enum states with an arbitrary
+> cycling palette — e.g. off-peak comes out **red**, exactly backwards. This SVG
+> strip colours zones semantically (green = cheap, amber = mid, red = peak) for
+> both past and future, so it replaces the history card entirely. Increase
+> *hours behind* in Options for a longer history tail.
+
+> The card's `content` is a **Jinja2** template (PiotrMachowski's card), not
+> JavaScript. **`ignore_line_breaks: true` is required** — otherwise the card
+> turns every template newline into a `<br>` and the SVG breaks, so the markup
+> is emitted on as few lines as possible with Jinja whitespace control
+> (`{%- -%}`). See [`examples/dashboard.yaml`](examples/dashboard.yaml) for the
+> full card (segment merging, boundary labels, now-marker, tooltips).
+
+> The "now" marker and boundary labels assume Home Assistant's timezone matches
+> the schedule's (Europe/Warsaw). If yours differs, the bars are still correct —
+> only the "now" highlight may land on the wrong cell.
 
 ### Color-coded agenda
 
