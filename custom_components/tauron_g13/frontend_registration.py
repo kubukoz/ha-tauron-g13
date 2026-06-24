@@ -64,27 +64,32 @@ class FrontendCardRegistration:
 
     async def _async_register_resource(self) -> None:
         """Add (or version-bump) the Lovelace resource in storage mode."""
-        lovelace = self.hass.data.get("lovelace")
+        # hass.data[LOVELACE_DATA] holds a LovelaceData dataclass with
+        # `.resource_mode` ("storage"/"yaml") and `.resources` (the collection).
+        from homeassistant.components.lovelace.const import (
+            LOVELACE_DATA,
+            MODE_STORAGE,
+        )
+
+        lovelace = self.hass.data.get(LOVELACE_DATA)
         if lovelace is None:
+            _LOGGER.warning("Lovelace not ready; G13 card resource not registered")
             return
 
         # In YAML mode the resource list is read-only; the user adds it manually.
-        mode = getattr(lovelace, "mode", None)
-        if mode != "storage":
-            _LOGGER.debug(
-                "Lovelace in %s mode; skipping auto-registration of the G13 card. "
-                "Add the resource manually: %s",
-                mode,
+        if lovelace.resource_mode != MODE_STORAGE:
+            _LOGGER.info(
+                "Lovelace resources in %s mode; add the G13 card manually: %s",
+                lovelace.resource_mode,
                 self._url(),
             )
             return
 
         resources = lovelace.resources
-        # Some HA versions load the resource store lazily.
-        if hasattr(resources, "async_get_info") and not getattr(
-            resources, "loaded", True
-        ):
+        # The storage collection loads lazily; ensure it's loaded before we read.
+        if not resources.loaded:
             await resources.async_load()
+            resources.loaded = True
 
         url = self._url()
         bare = f"{CARD_URL_BASE}/{CARD_FILENAME}"

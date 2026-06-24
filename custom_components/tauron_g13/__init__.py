@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.start import async_at_started
 
 from .const import DOMAIN
 from .coordinator import TauronG13Coordinator
@@ -39,8 +40,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 def _async_register_card_once(hass: HomeAssistant) -> None:
     """Register the bundled Lovelace card exactly once, after HA has started.
 
-    Deferred to EVENT_HOMEASSISTANT_STARTED so the Lovelace resource store is
-    ready; guarded by a flag so entry reloads don't re-register it.
+    ``async_at_started`` invokes the callback on the event loop when HA is (or
+    already is) fully started — so the Lovelace resource store is ready and the
+    task is scheduled thread-safely. Guarded by a flag so entry reloads don't
+    re-register it.
     """
     if hass.data.get(_CARD_REGISTERED):
         return
@@ -48,13 +51,14 @@ def _async_register_card_once(hass: HomeAssistant) -> None:
 
     registration = FrontendCardRegistration(hass)
 
-    if hass.is_running:
-        hass.async_create_task(registration.async_register())
-    else:
-        hass.bus.async_listen_once(
-            EVENT_HOMEASSISTANT_STARTED,
-            lambda _evt: hass.async_create_task(registration.async_register()),
+    @callback
+    def _start(_hass: HomeAssistant) -> None:
+        # On the event loop here, so creating the task is thread-safe.
+        hass.async_create_task(
+            registration.async_register(), "tauron_g13 card registration"
         )
+
+    async_at_started(hass, _start)
 
 
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
