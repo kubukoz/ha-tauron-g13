@@ -165,6 +165,11 @@ uv run --with holidays --with pytest python -m pytest custom_components/tauron_g
   rarely; if Tauron ever restructures G13, the hours in `zones.py` need a code
   update (and the tests make that safe).
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the project layout, how to run the
+tests, the release process, and the deploy/verify workflow.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
