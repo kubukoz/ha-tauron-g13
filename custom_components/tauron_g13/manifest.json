@@ -1,7 +1,7 @@
 {
   "domain": "tauron_g13",
   "name": "Tauron G13",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "documentation": "https://github.com/kubukoz/ha-tauron-g13",
   "issue_tracker": "https://github.com/kubukoz/ha-tauron-g13/issues",
   "codeowners": ["@kubukoz"],

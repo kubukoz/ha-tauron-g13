@@ -27,7 +27,7 @@ Weekends and Polish public holidays are `offpeak` all day.
 
 | Entity | Type | What it's for |
 |--------|------|---------------|
-| `sensor.tauron_g13_zone` | enum sensor | Current zone: `peak` / `mid` / `offpeak`. Attributes: `season`, `is_free_day`, `next_zone`, `next_change`, `minutes_until_change`. |
+| `sensor.tauron_g13_zone` | enum sensor | Current zone: `peak` / `mid` / `offpeak`. Attributes: `season`, `is_free_day`, `next_zone`, `next_change`, `minutes_until_change`, and `timeline` (one `{start, zone}` per hour over a configurable window, for the dashboard strip). |
 | `binary_sensor.tauron_g13_is_cheap` | binary | On during off-peak — **run** flexible loads now. |
 | `binary_sensor.tauron_g13_is_peak` | binary | On during the afternoon peak — **defer** loads. |
 | `calendar.tauron_g13_zones` | calendar | Zone blocks as events, past and future — powers the timeline view. |
@@ -40,7 +40,11 @@ Weekends and Polish public holidays are `offpeak` all day.
 2. Add `https://github.com/kubukoz/ha-tauron-g13`, category **Integration**.
 3. Install **Tauron G13**, restart Home Assistant.
 4. **Settings → Devices & Services → Add Integration → Tauron G13**. There is
-   nothing to configure.
+   nothing required to configure.
+
+> **Options.** The integration's **Configure** button lets you set how many
+> hours *behind* and *ahead* the `timeline` attribute (used by the dashboard
+> strip) reaches around the current hour. Defaults are 4 behind / 24 ahead.
 
 ### Manual
 
@@ -49,60 +53,79 @@ directory and restart.
 
 ## Dashboard
 
-A ready-made dashboard view (current zone + countdown, a −4h…+12h timeline
-strip, and the upcoming-zones calendar) is in
+A ready-made dashboard view (current zone + countdown, a colored per-hour
+timeline strip, and a color-coded upcoming-zones agenda) is in
 **[`examples/dashboard.yaml`](examples/dashboard.yaml)**. Paste it under `views:`
-via *Dashboard → Edit → Raw configuration editor*. The timeline strip uses the
-[ApexCharts Card](https://github.com/RomRider/apexcharts-card) HACS resource;
-the rest is built in.
+via *Dashboard → Edit → Raw configuration editor*.
 
-## Timeline view (past 4h + next 12h)
+Two of the cards are HACS frontend resources (the rest is built in):
 
-The calendar entity feeds Home Assistant's built-in **Calendar card** — no
-custom frontend needed. The card shows past and upcoming zone blocks as a
-timeline:
+| Card | Used for | HACS |
+|------|----------|------|
+| [`html-template-card`](https://github.com/PiotrMachowski/Home-Assistant-Lovelace-HTML-Jinja2-Template-card) | the per-hour SVG strip | required |
+| [`atomic-calendar-revive`](https://github.com/totaldebug/atomic-calendar-revive) | the color-coded agenda | required |
+
+### Timeline strip (one colored bar per hour)
+
+The strip renders directly from the sensor's `timeline` attribute — a
+precomputed list of `{start, zone}` per hour — so there's no charting library
+and no REST call: just one `<rect>` per hour, colored by zone, current hour
+outlined. The window is whatever you set in the integration's **Options**
+(default −4h … +24h).
 
 ```yaml
-type: calendar
-title: Tauron G13 zones
+type: custom:html-template-card
+title: G13 zones (−4h … +24h)
+ignore_line_errors: true
+content: |
+  ${(() => {
+    const tl = hass.states['sensor.tauron_g13_zone']
+      ?.attributes?.timeline || [];
+    if (!tl.length) return 'No timeline data yet.';
+    const palette = { offpeak: '#2e7d32', mid: '#f9a825', peak: '#c62828' };
+    const W = 100 / tl.length;
+    const now = new Date();
+    const bars = tl.map((c, i) => {
+      const d = new Date(c.start);
+      const fill = palette[c.zone] || palette.offpeak;
+      const isNow = Math.abs(d - now) < 3600000 && d.getHours() === now.getHours();
+      const stroke = isNow ? ' stroke="#ffffff" stroke-width="0.6"' : '';
+      return `<rect x="${i * W}" y="0" width="${W}" height="12" fill="${fill}"${stroke} />`;
+    }).join('');
+    return `<svg viewBox="0 0 100 14" width="100%" preserveAspectRatio="none"
+              style="display:block">${bars}</svg>`;
+  })()}
+```
+
+### Color-coded agenda
+
+The single `calendar.tauron_g13_zones` entity is listed three times in
+[Atomic Calendar Revive](https://github.com/totaldebug/atomic-calendar-revive),
+each with an `allowlist` regex matched against the event summary and its own
+`color`, so peak / mid / off-peak blocks show in three colors:
+
+```yaml
+type: custom:atomic-calendar-revive
+name: Upcoming zones
+maxDaysToShow: 7
 entities:
-  - calendar.tauron_g13_zones
-initial_view: listWeek
+  - entity: calendar.tauron_g13_zones
+    allowlist: '\(peak\)'
+    color: '#c62828'   # peak — red
+  - entity: calendar.tauron_g13_zones
+    allowlist: '\(mid\)'
+    color: '#f9a825'   # mid — amber
+  - entity: calendar.tauron_g13_zones
+    allowlist: '\(off-peak\)'
+    color: '#2e7d32'   # offpeak — green
 ```
 
-For a denser, color-coded strip showing exactly the **last 4 hours and next 12
-hours**, use [ApexCharts Card](https://github.com/RomRider/apexcharts-card)
-with a timeline (range-bar) series driven by the same calendar:
-
-```yaml
-type: custom:apexcharts-card
-graph_span: 16h
-span:
-  start: hour
-  offset: "-4h"
-experimental:
-  color_threshold: true
-header:
-  show: true
-  title: G13 zones (−4h … +12h)
-now:
-  show: true
-  label: now
-series:
-  - entity: sensor.tauron_g13_zone
-    name: Zone
-    type: column
-    color_threshold:
-      - value: 0
-        color: "#2e7d32"   # offpeak — green
-      - value: 1
-        color: "#f9a825"   # mid — amber
-      - value: 2
-        color: "#c62828"   # peak — red
-```
-
-> The ApexCharts example graphs the **current** zone over time using HA history.
-> The Calendar card is the zero-dependency way to see future blocks.
+> The off-peak summary also contains the substring `peak`, so the peak
+> allowlist is anchored on `\(peak\)` and off-peak on `\(off-peak\)`.
+>
+> Prefer zero HACS dependencies? The built-in **Calendar card**
+> (`type: calendar`, `initial_view: listWeek`) shows the same blocks as a plain
+> week agenda — just without per-zone colors.
 
 ## Example automations
 

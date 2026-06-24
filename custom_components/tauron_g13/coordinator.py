@@ -4,7 +4,7 @@ no-poll scheduling that recomputes the zone exactly at each boundary."""
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import holidays
@@ -72,6 +72,22 @@ class TauronG13Coordinator:
         return events_between(
             start.astimezone(self._tz), end.astimezone(self._tz), self.is_free_day
         )
+
+    def timeline(self, hours_behind: int, hours_ahead: int) -> list[dict]:
+        """One entry per whole hour over [now - behind, now + ahead).
+
+        Each entry is ``{"start": iso8601, "zone": "offpeak"|"mid"|"peak"}`` and
+        is aligned to the top of the hour. Intended for the dashboard strip,
+        which draws one colored cell per entry.
+        """
+        anchor = self.now().replace(minute=0, second=0, microsecond=0)
+        first = anchor - timedelta(hours=hours_behind)
+        out: list[dict] = []
+        for i in range(hours_behind + hours_ahead):
+            t = first + timedelta(hours=i)
+            zone = zone_at(t, self.is_free_day(t.date()))
+            out.append({"start": t.isoformat(), "zone": zone.value})
+        return out
 
     @callback
     def async_add_listener(self, update_callback: CALLBACK_TYPE) -> CALLBACK_TYPE:

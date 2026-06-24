@@ -7,7 +7,14 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, ZONE_LABELS
+from .const import (
+    CONF_TIMELINE_HOURS_AHEAD,
+    CONF_TIMELINE_HOURS_BEHIND,
+    DEFAULT_TIMELINE_HOURS_AHEAD,
+    DEFAULT_TIMELINE_HOURS_BEHIND,
+    DOMAIN,
+    ZONE_LABELS,
+)
 from .coordinator import TauronG13Coordinator
 from .entity import TauronG13Entity
 from .zones import Zone, is_summer, zone_at
@@ -19,7 +26,13 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: TauronG13Coordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([TauronG13ZoneSensor(coordinator, entry.entry_id)])
+    behind = entry.options.get(
+        CONF_TIMELINE_HOURS_BEHIND, DEFAULT_TIMELINE_HOURS_BEHIND
+    )
+    ahead = entry.options.get(CONF_TIMELINE_HOURS_AHEAD, DEFAULT_TIMELINE_HOURS_AHEAD)
+    async_add_entities(
+        [TauronG13ZoneSensor(coordinator, entry.entry_id, behind, ahead)]
+    )
 
 
 class TauronG13ZoneSensor(TauronG13Entity, SensorEntity):
@@ -30,10 +43,18 @@ class TauronG13ZoneSensor(TauronG13Entity, SensorEntity):
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = [z.value for z in Zone]
 
-    def __init__(self, coordinator: TauronG13Coordinator, entry_id: str) -> None:
+    def __init__(
+        self,
+        coordinator: TauronG13Coordinator,
+        entry_id: str,
+        timeline_hours_behind: int,
+        timeline_hours_ahead: int,
+    ) -> None:
         super().__init__(coordinator, entry_id)
         self._attr_unique_id = f"{entry_id}_zone"
         self._attr_name = "Zone"
+        self._timeline_hours_behind = timeline_hours_behind
+        self._timeline_hours_ahead = timeline_hours_ahead
 
     @property
     def native_value(self) -> str:
@@ -53,4 +74,9 @@ class TauronG13ZoneSensor(TauronG13Entity, SensorEntity):
             "next_zone": nz.value,
             "next_change": nxt.isoformat(),
             "minutes_until_change": minutes,
+            # One {start, zone} per hour over the configured window, for the
+            # dashboard strip to render as colored cells.
+            "timeline": self.coordinator.timeline(
+                self._timeline_hours_behind, self._timeline_hours_ahead
+            ),
         }

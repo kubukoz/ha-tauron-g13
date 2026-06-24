@@ -46,48 +46,82 @@ views:
           - entity: binary_sensor.tauron_g13_is_peak
             name: Peak
 
-      # ---- Timeline strip: last 4h … next 12h (ApexCharts) --------------- #
-      - type: custom:apexcharts-card
-        graph_span: 16h
-        span:
-          start: hour
-          offset: "-4h"
-        experimental:
-          color_threshold: true
-        header:
-          show: true
-          title: G13 zones (−4h … +12h)
-          show_states: true
-        now:
-          show: true
-          label: now
-        yaxis:
-          - min: 0
-            max: 2
-            decimals: 0
-            apex_config:
-              tickAmount: 2
-        series:
-          - entity: sensor.tauron_g13_zone
-            name: Zone
-            type: column
-            # Map the enum to a number so it plots: offpeak=0, mid=1, peak=2.
-            transform: >-
-              return { offpeak: 0, mid: 1, peak: 2 }[x] ?? 0;
-            color_threshold:
-              - value: 0
-                color: "#2e7d32"   # offpeak — green
-              - value: 1
-                color: "#f9a825"   # mid — amber
-              - value: 2
-                color: "#c62828"   # peak — red
+      # ---- Timeline strip: one colored bar per hour (inline SVG) ---------- #
+      #
+      # Rendered with html-template-card (HACS) straight from the zone sensor's
+      # `timeline` attribute — a precomputed list of {start, zone} per hour. No
+      # charting library, no REST call: just one <rect> per hour, colored by
+      # zone, with the current hour outlined. The window (−4h…+24h by default)
+      # is set in the integration's options, so this card needs no tuning.
+      #
+      # html-template-card evaluates the ${...} block as JS with `hass`/`states`
+      # in scope and injects the returned string as raw HTML (no sanitizing), so
+      # inline SVG renders as-is.
+      - type: custom:html-template-card
+        title: G13 zones (−4h … +24h)
+        ignore_line_errors: true
+        content: |
+          ${(() => {
+            const tl = hass.states['sensor.tauron_g13_zone']
+              ?.attributes?.timeline || [];
+            if (!tl.length) return 'No timeline data yet.';
 
-      # ---- Future blocks as a native calendar timeline ------------------- #
-      - type: calendar
-        title: Upcoming zones
-        initial_view: listDay
+            const palette = {
+              offpeak: '#2e7d32',  // green
+              mid:     '#f9a825',  // amber
+              peak:    '#c62828',  // red
+            };
+            const W = 100 / tl.length;          // bar width in % of viewBox
+            const now = new Date();
+
+            const bars = tl.map((c, i) => {
+              const d = new Date(c.start);
+              const fill = palette[c.zone] || palette.offpeak;
+              // Outline the cell that contains the current hour.
+              const isNow = Math.abs(d - now) < 3600000 &&
+                d.getHours() === now.getHours();
+              const stroke = isNow
+                ? ' stroke="#ffffff" stroke-width="0.6"' : '';
+              // Hour label every 3 hours to avoid clutter.
+              const label = d.getHours() % 3 === 0
+                ? `<text x="${i * W + W / 2}" y="19" font-size="3"
+                     text-anchor="middle" fill="var(--secondary-text-color)"
+                     >${String(d.getHours()).padStart(2, '0')}</text>`
+                : '';
+              return `<rect x="${i * W}" y="0" width="${W}" height="12"
+                        fill="${fill}"${stroke} />${label}`;
+            }).join('');
+
+            return `<svg viewBox="0 0 100 22" width="100%"
+                      preserveAspectRatio="none"
+                      style="display:block">${bars}</svg>`;
+          })()}
+
+      # ---- Future blocks as a color-coded agenda ------------------------- #
+      #
+      # Atomic Calendar Revive (HACS) lets a single calendar entity be listed
+      # several times with an `allowlist` regex (matched against the event
+      # summary) and its own `color`. We split the one zones calendar into three
+      # colored streams by the English zone word in the summary, e.g.
+      # "Szczyt (peak)" / "Przedpołudnie (mid)" / "Pozaszczytowa (off-peak)".
+      #
+      # NOTE: the off-peak summary also contains the substring "peak", so the
+      # peak allowlist is anchored on "(peak)" and off-peak on "(off-peak)".
+      - type: custom:atomic-calendar-revive
+        name: Upcoming zones
+        showDate: true
+        maxDaysToShow: 7
+        showNoEventsForToday: true
         entities:
-          - calendar.tauron_g13_zones
+          - entity: calendar.tauron_g13_zones
+            allowlist: '\(peak\)'
+            color: '#c62828'   # peak — red
+          - entity: calendar.tauron_g13_zones
+            allowlist: '\(mid\)'
+            color: '#f9a825'   # mid — amber
+          - entity: calendar.tauron_g13_zones
+            allowlist: '\(off-peak\)'
+            color: '#2e7d32'   # offpeak — green
 
       # ---- History: how the zone moved over the last day ----------------- #
       - type: history-graph

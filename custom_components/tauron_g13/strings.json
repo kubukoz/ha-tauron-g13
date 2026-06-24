@@ -9,5 +9,17 @@
     "abort": {
       "already_configured": "Tauron G13 is already set up."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Timeline range",
+        "description": "How far the `timeline` attribute (used by the dashboard strip) reaches around the current hour.",
+        "data": {
+          "timeline_hours_behind": "Hours behind",
+          "timeline_hours_ahead": "Hours ahead"
+        }
+      }
+    }
   }
 }

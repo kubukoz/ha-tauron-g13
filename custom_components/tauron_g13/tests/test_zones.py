@@ -6,7 +6,7 @@ Requires:  pytest, holidays
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import holidays
@@ -186,6 +186,38 @@ def test_events_contiguous_no_gaps():
 
 def test_events_empty_when_end_not_after_start():
     assert events_between(dt(2026, 1, 13, 12), dt(2026, 1, 13, 12), free_day) == []
+
+
+# --------------------------------------------------------------------------- #
+# Hourly timeline (dashboard strip source). The coordinator's timeline() is a
+# thin hour-by-hour walk over zone_at; we reproduce it here against the pure
+# engine so the per-hour cells the strip draws stay correct.
+# --------------------------------------------------------------------------- #
+
+
+def _timeline(now, behind, ahead):
+    anchor = now.replace(minute=0, second=0, microsecond=0)
+    first = anchor - timedelta(hours=behind)
+    return [
+        {"start": (first + timedelta(hours=i)), "zone": zone_at(first + timedelta(hours=i), free_day((first + timedelta(hours=i)).date()))}
+        for i in range(behind + ahead)
+    ]
+
+
+def test_timeline_count_and_alignment():
+    # Winter Tuesday 10:30 -> anchor 10:00, 4 behind + 24 ahead = 28 cells.
+    tl = _timeline(dt(2026, 1, 13, 10, 30), 4, 24)
+    assert len(tl) == 28
+    assert tl[0]["start"] == dt(2026, 1, 13, 6, 0)  # 10:00 - 4h
+    assert tl[-1]["start"] == dt(2026, 1, 14, 9, 0)  # 10:00 + 23h (last of 24 ahead)
+
+
+def test_timeline_zone_classification():
+    tl = {e["start"].hour: e["zone"] for e in _timeline(dt(2026, 1, 13, 10), 4, 10)}
+    assert tl[6] is Zone.OFFPEAK
+    assert tl[8] is Zone.MID
+    assert tl[14] is Zone.OFFPEAK
+    assert tl[17] is Zone.PEAK
 
 
 # --------------------------------------------------------------------------- #
