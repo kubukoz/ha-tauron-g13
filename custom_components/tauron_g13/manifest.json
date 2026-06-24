@@ -1,0 +1,12 @@
+{
+  "domain": "tauron_g13",
+  "name": "Tauron G13",
+  "version": "0.1.0",
+  "documentation": "https://github.com/kubukoz/ha-tauron-g13",
+  "issue_tracker": "https://github.com/kubukoz/ha-tauron-g13/issues",
+  "codeowners": ["@kubukoz"],
+  "config_flow": true,
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "requirements": ["holidays>=0.60"]
+}
