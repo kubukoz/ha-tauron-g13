@@ -1,107 +1,98 @@
-# Tauron G13 dashboard view.
+# Tauron G13 — complete dashboard.
 #
-# Add this as a new view to a dashboard:
-#   Dashboard -> Edit -> Raw configuration editor, then paste under `views:`
-# (or use it as the whole `views:` list).
+# This is a WHOLE dashboard (top-level `views:`). Paste it as the entire
+# contents of:  Dashboard -> Edit -> ⋮ -> Raw configuration editor
 #
-# The ApexCharts card needs the "ApexCharts Card" frontend resource installed
-# via HACS (https://github.com/RomRider/apexcharts-card). The Calendar and
-# Entities cards are built in and need nothing extra.
+# The timeline strip uses the "ApexCharts Card" frontend resource, installed
+# via HACS (https://github.com/RomRider/apexcharts-card). The Entities and
+# Calendar cards are built in and need nothing extra.
 
 title: Energy
-path: tauron-g13
-icon: mdi:transmission-tower
-cards:
-  # ---- At-a-glance: current zone + countdown ----------------------------- #
-  - type: entities
-    title: Tauron G13 — now
-    show_header_toggle: false
-    entities:
-      - entity: sensor.tauron_g13_zone
-        name: Current zone
-      - type: attribute
-        entity: sensor.tauron_g13_zone
-        attribute: minutes_until_change
-        name: Changes in (min)
-      - type: attribute
-        entity: sensor.tauron_g13_zone
-        attribute: next_zone
-        name: Next zone
-      - type: attribute
-        entity: sensor.tauron_g13_zone
-        attribute: next_change
-        name: At
-      - type: attribute
-        entity: sensor.tauron_g13_zone
-        attribute: season
-        name: Season
-      - entity: binary_sensor.tauron_g13_is_cheap
-        name: Cheap now
-      - entity: binary_sensor.tauron_g13_is_peak
-        name: Peak now
+views:
+  - title: Tauron G13
+    path: tauron-g13
+    icon: mdi:transmission-tower
+    cards:
+      # ---- At-a-glance: current zone + countdown ------------------------- #
+      - type: entities
+        title: Tauron G13 — now
+        show_header_toggle: false
+        entities:
+          - entity: sensor.tauron_g13_zone
+            name: Current zone
+          - type: attribute
+            entity: sensor.tauron_g13_zone
+            attribute: minutes_until_change
+            name: Changes in (min)
+          - type: attribute
+            entity: sensor.tauron_g13_zone
+            attribute: next_zone
+            name: Next zone
+          - type: attribute
+            entity: sensor.tauron_g13_zone
+            attribute: next_change
+            name: At
+          - type: attribute
+            entity: sensor.tauron_g13_zone
+            attribute: season
+            name: Season
 
-  # ---- Big colored badge for the current zone ---------------------------- #
-  - type: gauge
-    entity: sensor.tauron_g13_zone
-    name: Zone
-    # gauge needs a number; this is optional eye-candy — remove if you don't
-    # add the template sensor below. See note at bottom of file.
+      # ---- Cheap / peak flags as glanceable badges ----------------------- #
+      - type: glance
+        title: Right now
+        entities:
+          - entity: binary_sensor.tauron_g13_is_cheap
+            name: Cheap
+          - entity: binary_sensor.tauron_g13_is_peak
+            name: Peak
 
-  # ---- Timeline strip: last 4h … next 12h (ApexCharts) ------------------- #
-  - type: custom:apexcharts-card
-    graph_span: 16h
-    span:
-      start: hour
-      offset: "-4h"
-    experimental:
-      color_threshold: true
-    header:
-      show: true
-      title: G13 zones (−4h … +12h)
-      show_states: true
-    now:
-      show: true
-      label: now
-    yaxis:
-      - min: 0
-        max: 2
-        decimals: 0
-        apex_config:
-          tickAmount: 2
-    series:
-      - entity: sensor.tauron_g13_zone
-        name: Zone
-        type: column
-        # Map the enum to a number so it plots: offpeak=0, mid=1, peak=2.
-        transform: >-
-          return { offpeak: 0, mid: 1, peak: 2 }[x] ?? 0;
-        color_threshold:
-          - value: 0
-            color: "#2e7d32"   # offpeak — green
-          - value: 1
-            color: "#f9a825"   # mid — amber
-          - value: 2
-            color: "#c62828"   # peak — red
+      # ---- Timeline strip: last 4h … next 12h (ApexCharts) --------------- #
+      - type: custom:apexcharts-card
+        graph_span: 16h
+        span:
+          start: hour
+          offset: "-4h"
+        experimental:
+          color_threshold: true
+        header:
+          show: true
+          title: G13 zones (−4h … +12h)
+          show_states: true
+        now:
+          show: true
+          label: now
+        yaxis:
+          - min: 0
+            max: 2
+            decimals: 0
+            apex_config:
+              tickAmount: 2
+        series:
+          - entity: sensor.tauron_g13_zone
+            name: Zone
+            type: column
+            # Map the enum to a number so it plots: offpeak=0, mid=1, peak=2.
+            transform: >-
+              return { offpeak: 0, mid: 1, peak: 2 }[x] ?? 0;
+            color_threshold:
+              - value: 0
+                color: "#2e7d32"   # offpeak — green
+              - value: 1
+                color: "#f9a825"   # mid — amber
+              - value: 2
+                color: "#c62828"   # peak — red
 
-  # ---- Future blocks as a native calendar timeline ----------------------- #
-  - type: calendar
-    title: Upcoming zones
-    initial_view: listDay
-    entities:
-      - calendar.tauron_g13_zones
+      # ---- Future blocks as a native calendar timeline ------------------- #
+      - type: calendar
+        title: Upcoming zones
+        initial_view: listDay
+        entities:
+          - calendar.tauron_g13_zones
 
-# ---------------------------------------------------------------------------
-# NOTE on the gauge card above: a gauge needs a numeric entity, but
-# sensor.tauron_g13_zone is text (peak/mid/offpeak). Either delete the gauge
-# card, or add this template sensor to configuration.yaml to get a 0/1/2 value
-# the gauge (and other numeric cards) can use:
-#
-#   template:
-#     - sensor:
-#         - name: Tauron G13 zone level
-#           unique_id: tauron_g13_zone_level
-#           state: >-
-#             {{ {'offpeak': 0, 'mid': 1, 'peak': 2}[states('sensor.tauron_g13_zone')] | default(0) }}
-#
-# then point the gauge at sensor.tauron_g13_zone_level.
-# ---------------------------------------------------------------------------
+      # ---- History: how the zone moved over the last day ----------------- #
+      - type: history-graph
+        title: Zone history (24h)
+        hours_to_show: 24
+        entities:
+          - entity: sensor.tauron_g13_zone
+            name: Zone
