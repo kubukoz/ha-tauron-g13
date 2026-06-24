@@ -47,6 +47,15 @@ Weekends and Polish public holidays are `offpeak` all day.
 Copy `custom_components/tauron_g13/` into your HA `config/custom_components/`
 directory and restart.
 
+## Dashboard
+
+A ready-made dashboard view (current zone + countdown, a −4h…+12h timeline
+strip, and the upcoming-zones calendar) is in
+**[`examples/dashboard.yaml`](examples/dashboard.yaml)**. Paste it under `views:`
+via *Dashboard → Edit → Raw configuration editor*. The timeline strip uses the
+[ApexCharts Card](https://github.com/RomRider/apexcharts-card) HACS resource;
+the rest is built in.
+
 ## Timeline view (past 4h + next 12h)
 
 The calendar entity feeds Home Assistant's built-in **Calendar card** — no
